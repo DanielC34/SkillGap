@@ -58,6 +58,28 @@ export interface JobBenchmark {
   salaryRange: string;
 }
 
+export interface InterviewQuestion {
+  id: string;
+  question: string;
+  skillFocused: string;
+}
+
+export interface InterviewFeedback {
+  score: number;
+  suggestions: string;
+  comparisonWithGaps: string;
+}
+
+export interface PublicProfile {
+  username: string;
+  isPublic: boolean;
+  name: string;
+  targetRole: string;
+  matchScore: number;
+  skillsMatrix: SkillGapItem[];
+  verifiedCredentials: Credential[];
+}
+
 export interface AnalysisResponse {
   success: boolean;
   matchScore: number;

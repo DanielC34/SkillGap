@@ -8,17 +8,21 @@ import ResumeUpload from "./components/ResumeUpload";
 import RadarChart from "./components/RadarChart";
 import TimelinePath from "./components/TimelinePath";
 import CredentialVault from "./components/CredentialVault";
+import InterviewLab from "./components/InterviewLab";
+import SalaryTrajectory from "./components/SalaryTrajectory";
+import PublicPortfolio from "./components/PublicPortfolio";
 import { AnalysisResponse, JobBenchmark, LearningPath, LearningStep, Credential } from "./types";
 import { 
   Trophy, Sparkles, RefreshCw, Briefcase, Compass, 
   HelpCircle, Activity, ArrowUpRight, Layers, LogOut, 
   ChevronRight, Database, Shield, Flame, Laptop, FileText,
-  KeyRound, ShieldCheck, Award, GraduationCap, Grid, ExternalLink
+  KeyRound, ShieldCheck, Award, GraduationCap, Grid, ExternalLink,
+  Terminal, Globe, Link, Copy, Check
 } from "lucide-react";
 
 export default function App() {
   const [benchmarks, setBenchmarks] = useState<JobBenchmark[]>([]);
-  const [activeTab, setActiveTab] = useState<"onboarding" | "pathways" | "credentials">("onboarding");
+  const [activeTab, setActiveTab] = useState<"onboarding" | "pathways" | "credentials" | "interview">("onboarding");
   const [selectedBenchmark, setSelectedBenchmark] = useState<JobBenchmark | null>(null);
   
   // App state
@@ -31,11 +35,73 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
 
+  // New features state
+  const [isPublicView, setIsPublicView] = useState(false);
+  const [publicUsername, setPublicUsername] = useState<string | null>(null);
+  const [publicProfile, setPublicProfile] = useState<any | null>(null);
+  const [publicProfileError, setPublicProfileError] = useState<string | null>(null);
+
+  const [isProfilePublic, setIsProfilePublic] = useState(false);
+  const [customPublicUsername, setCustomPublicUsername] = useState("candidate2026");
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isSavingPublicSettings, setIsSavingPublicSettings] = useState(false);
+
   // 1. Fetch job benchmarks and credentials on mount
   useEffect(() => {
+    // Detect public URL paths, e.g. /p/candidate2026
+    const path = window.location.pathname;
+    if (path.startsWith("/p/")) {
+      const parts = path.split("/");
+      const username = parts[2] || "";
+      if (username.trim()) {
+        setIsPublicView(true);
+        setPublicUsername(username);
+        fetchPublicProfile(username);
+        return; // skip subsequent standard loads
+      }
+    }
+
     fetchBenchmarks();
     fetchCredentials();
   }, []);
+
+  const fetchPublicProfile = async (username: string) => {
+    try {
+      const res = await fetch(`/api/p/${username}`);
+      const data = await res.json();
+      if (data.success && data.profile) {
+        setPublicProfile(data.profile);
+      } else {
+        setPublicProfileError(data.error || "This profile is not listed or set to private.");
+      }
+    } catch (err) {
+      setPublicProfileError("Server linkage aborted. Could not load public workspace.");
+    }
+  };
+
+  const handleToggleProfilePublic = async (willBePublic: boolean, customSlug: string) => {
+    setIsSavingPublicSettings(true);
+    try {
+      const res = await fetch("/api/profile/toggle-public", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: willBePublic, username: customSlug })
+      });
+      const data = await res.json();
+      if (data.success && data.profile) {
+        setIsProfilePublic(data.profile.isPublic);
+        setCustomPublicUsername(data.profile.username);
+        setResetMessage(`Portfolio access settings synced securely.`);
+        setTimeout(() => setResetMessage(null), 3000);
+      } else {
+        setError(data.error || "Failed to update profile settings.");
+      }
+    } catch (err) {
+      setError("Network fault sync profile settings.");
+    } finally {
+      setIsSavingPublicSettings(false);
+    }
+  };
 
   const fetchBenchmarks = async () => {
     try {
@@ -259,6 +325,34 @@ ${formattedSteps}
 
   const currentMatchedBenchmark = selectedBenchmark || (benchmarks.length > 0 ? benchmarks[0] : null);
 
+  if (isPublicView) {
+    if (publicProfileError) {
+      return (
+        <div className="min-h-screen w-full bg-[#050505] text-[#ededed] font-sans flex flex-col justify-center items-center p-6 text-center select-none">
+          <div className="max-w-md border border-zinc-900 rounded-lg p-6 bg-zinc-950 space-y-4">
+            <div className="w-10 h-10 rounded bg-red-950/20 border border-red-900/40 text-red-500 flex items-center justify-center mx-auto font-mono font-bold text-lg">!</div>
+            <h1 className="text-sm font-semibold tracking-widest uppercase font-mono text-zinc-100">PROFILES SECURITY LEDGER ERROR</h1>
+            <p className="text-xs text-zinc-400 font-mono">{publicProfileError}</p>
+            <a href="/" className="text-[10px] inline-block px-4 py-2 bg-white text-black font-semibold uppercase tracking-tight rounded hover:bg-zinc-200 cursor-pointer">
+              Return Home
+            </a>
+          </div>
+        </div>
+      );
+    }
+    if (!publicProfile) {
+      return (
+        <div className="min-h-screen w-full bg-[#050505] text-[#ededed] font-sans flex flex-col justify-center items-center p-6 text-center">
+          <div className="space-y-3">
+            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-xs text-zinc-500 font-mono tracking-widest uppercase">Fetching Public Portfolio Data...</p>
+          </div>
+        </div>
+      );
+    }
+    return <PublicPortfolio username={publicUsername || ""} profile={publicProfile} />;
+  }
+
   return (
     <div className="flex h-screen w-full bg-[#050505] text-[#ededed] font-sans overflow-hidden border border-[#262626]">
       
@@ -308,6 +402,21 @@ ${formattedSteps}
             title="Credential Vault"
           >
             <KeyRound className="w-4.5 h-4.5" />
+          </button>
+
+          <button 
+            onClick={() => {
+              if (analysis) setActiveTab("interview");
+              else alert("Complete your Resume Ingestion on Onboarding first to unlock the Interview Simulator!");
+            }}
+            className={`w-10 h-10 rounded flex items-center justify-center transition-all duration-150 relative ${
+              !analysis ? "opacity-40 cursor-not-allowed" : ""
+            } ${
+              activeTab === "interview" ? "bg-zinc-900 border border-zinc-800 text-white" : "text-zinc-600 hover:text-zinc-300"
+            }`}
+            title="Interview Lab"
+          >
+            <Terminal className="w-4.5 h-4.5" />
           </button>
         </nav>
 
@@ -493,175 +602,260 @@ ${formattedSteps}
 
             </div>
           ) : (
-            /* ACTIVE PROCESSED STATE BENTO DESIGN GRID (For Dynamic Pathways/Feedback) */
-            <div className="grid grid-cols-12 auto-rows-auto gap-4">
+            <div className="space-y-6">
               
-              {/* Box 1 (col-span-12 md:col-span-3): Live Match Score percentage */}
-              <section className="col-span-12 md:col-span-3 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                  <h2 className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono font-bold">Match Score</h2>
-                  <span className="text-[10px] text-emerald-500 bg-emerald-950/20 px-1.5 py-0.5 border border-emerald-900/30 rounded font-mono">
-                    +{Math.round((learningPath?.currentMatchScore || 0) - (learningPath?.baseMatchScore || 0))}% dynamic
-                  </span>
-                </div>
-                <div className="my-3">
-                  <div className="text-6xl font-light tracking-tighter text-white">
-                    {learningPath?.currentMatchScore || analysis.matchScore}<span className="text-2xl text-zinc-600">%</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed mt-2">
-                    Highly competitive alignment for <br/>
-                    <span className="text-white font-semibold font-sans">{analysis.roleTitle}</span>
-                  </p>
-                </div>
-                <div className="w-full h-1 bg-[#1f1f1f] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-white opacity-80 transition-all duration-500"
-                    style={{ width: `${learningPath?.currentMatchScore || analysis.matchScore}%` }}
-                  ></div>
-                </div>
-              </section>
+              {/* TOP HEADER SUB-TABS INTERACTIVE BAR */}
+              <div className="flex gap-2 border-b border-[#1f1f1f] pb-3 select-none">
+                <button 
+                  onClick={() => setActiveTab("pathways")}
+                  className={`px-4 py-2 text-xs font-mono font-bold uppercase transition-all duration-150 border-b-2 cursor-pointer ${
+                    activeTab === "pathways" ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  📊 Core Dashboard
+                </button>
+                <button 
+                  onClick={() => setActiveTab("credentials")}
+                  className={`px-4 py-2 text-xs font-mono font-bold uppercase transition-all duration-150 border-b-2 cursor-pointer ${
+                    activeTab === "credentials" ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  🔑 Verified Ledger
+                </button>
+                <button 
+                  onClick={() => setActiveTab("interview")}
+                  className={`px-4 py-2 text-xs font-mono font-bold uppercase transition-all duration-150 border-b-2 cursor-pointer ${
+                    activeTab === "interview" ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  💻 Interview Lab
+                </button>
+              </div>
 
-              {/* Box 2 (col-span-12 md:col-span-6): Live Monospace Logs of Resume Parser */}
-              <section className="col-span-12 md:col-span-6 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
-                <div className="flex justify-between items-center pb-2 border-b border-[#1f1f1f]/80">
-                  <h3 className="text-[10px] uppercase tracking-widest text-[#ededed]/60 font-mono font-bold">Resume Analysis logs</h3>
-                  <span className="text-[9.5px] text-zinc-500 font-mono">parser_engine_v3.ts</span>
-                </div>
-                
-                <div className="flex-1 my-3 font-mono text-[11px] text-zinc-500 space-y-1.5 overflow-hidden">
-                  <div className="flex gap-2">
-                    <span className="text-zinc-700">01</span>
-                    <span>Parsed raw resume stream successfully - Confidence 100%</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-zinc-700">02</span>
-                    <span>Extracted skills: {analysis.skillsMatrix.slice(0, 3).map(s => s.skillName).join(", ")}, etc.</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-zinc-700">03</span>
-                    <span>Mapped against dynamic target role benchmarks.</span>
-                  </div>
-                  <div className="flex gap-2 text-zinc-400">
-                    <span className="text-zinc-700">04</span>
-                    <span>Critical skill gap highlights: {analysis.skillsMatrix.filter(s => s.targetLevel - s.resumeLevel >= 2).length} vectors found.</span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-[#1f1f1f] flex flex-wrap gap-2 justify-between items-center mt-2">
-                  <span className="text-[10.5px] text-zinc-400 font-mono truncate max-w-[200px]">Candidate: {analysis.roleTitle}</span>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={handleExportSummary}
-                      className="text-[10px] px-3.5 py-1.5 border border-[#1f1f1f] hover:border-zinc-700 bg-transparent text-zinc-300 font-semibold uppercase tracking-tighter rounded transition duration-150 flex items-center gap-1.5 cursor-pointer"
-                      title="Export markdown report of current state"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      Export Summary
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setAnalysis(null);
-                        setLearningPath(null);
-                        setActiveTab("onboarding");
-                      }}
-                      className="text-[10px] px-3.5 py-1.5 bg-white text-black font-semibold uppercase tracking-tighter rounded hover:bg-zinc-200 transition duration-150 cursor-pointer"
-                    >
-                      Ingest Another
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              {/* Box 3 (col-span-12 md:col-span-3): Target Market Demand & Salaries */}
-              <section className="col-span-12 md:col-span-3 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
-                <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono font-bold">Market Telemetry</h3>
-                <div className="space-y-4 my-2">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <div className="text-2xl font-semibold tracking-tighter text-white">
-                        {currentMatchedBenchmark?.marketDemand === "Very High" ? "+24.8%" : "+14.1%"}
-                      </div>
-                      <div className="text-[10px] text-zinc-500 uppercase font-mono mt-0.5">TARGET DEMAND VELOCITY</div>
-                    </div>
-                    <div className="w-12 h-6 flex items-end gap-0.5 shrink-0">
-                      <div className="w-2 h-1 bg-zinc-800 rounded-sm"></div>
-                      <div className="w-2 h-2.5 bg-zinc-700 rounded-sm"></div>
-                      <div className="w-2 h-4 bg-white opacity-40 rounded-sm"></div>
-                      <div className="w-2 h-6 bg-white rounded-sm"></div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <div className="text-xl font-semibold tracking-tighter text-zinc-400">
-                        {currentMatchedBenchmark?.salaryRange || "$125k - $185k"}
-                      </div>
-                      <div className="text-[10px] text-zinc-500 uppercase font-mono mt-0.5">ESTIMATED VALUATION</div>
-                    </div>
-                    <div className="w-12 h-6 flex items-end gap-0.5 shrink-0">
-                      <div className="w-2 h-6 bg-white opacity-40 rounded-sm"></div>
-                      <div className="w-2 h-4 bg-zinc-700 rounded-sm"></div>
-                      <div className="w-2 h-2.5 bg-zinc-800 rounded-sm"></div>
-                      <div className="w-2 h-1 bg-zinc-900 rounded-sm"></div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Box 4 (col-span-12 lg:col-span-5): Mapped Skills Gaps list (Radar chart replacement/wrapper) */}
-              <section className="col-span-12 lg:col-span-5 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
-                <RadarChart 
-                  skillsMatrix={analysis.skillsMatrix}
-                  targetRole={analysis.roleTitle}
-                />
-              </section>
-
-              {/* Box 5 (col-span-12 lg:col-span-7): Custom Learning Curriculum steps timeline */}
-              <section className="col-span-12 lg:col-span-7 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col">
-                {learningPath && (
-                  <TimelinePath
-                    learningPath={learningPath}
-                    onToggleStep={handleToggleStep}
-                    onVerifyStep={handleVerifyStep}
-                    verifiedStepIds={verifiedStepIds}
+              {activeTab === "interview" ? (
+                <div className="max-w-4xl">
+                  <InterviewLab 
+                    targetRole={analysis.roleTitle} 
+                    skillsMatrix={analysis.skillsMatrix} 
                   />
-                )}
-              </section>
-
-              {/* Box 6 (col-span-12 md:col-span-8): Verified Database Credentials Vault */}
-              <section className="col-span-12 md:col-span-8 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col">
-                <CredentialVault 
-                  credentials={credentials}
-                  onAddCustomCredential={handleAddCustomCredential}
-                  onResetVault={handleReset}
-                />
-              </section>
-
-              {/* Box 7 (col-span-12 md:col-span-4): High Contrast Vercel/Stripe Quick Action Card */}
-              <section 
-                onClick={() => {
-                  const firstIncomplete = learningPath?.steps.find(s => !s.completed);
-                  if (firstIncomplete) {
-                    handleToggleStep(firstIncomplete.id);
-                  } else {
-                    alert("Complete! All custom curriculum items verified in PostgreSQL vault.");
-                  }
-                }}
-                className="col-span-12 md:col-span-4 bg-white rounded-lg p-5 flex items-center justify-between cursor-pointer group hover:bg-zinc-200 transition-all duration-150 relative overflow-hidden"
-              >
-                <div className="flex flex-col select-none">
-                  <h3 className="text-[10px] uppercase tracking-widest text-black/50 font-bold font-mono">
-                    Quick Action
-                  </h3>
-                  <span className="text-sm font-bold text-black mt-1 font-sans">
-                    {learningPath?.steps.some(s => !s.completed) ? "Start Next Module" : "Retake Curriculum Pathways"}
-                  </span>
                 </div>
-                <div className="w-10 h-10 rounded-full border border-black/20 flex items-center justify-center group-hover:border-black/55 transition-colors shrink-0">
-                  <ChevronRight className="w-5 h-5 text-black stroke-[2.5]" />
+              ) : activeTab === "credentials" ? (
+                <div className="max-w-4xl">
+                  <CredentialVault 
+                    credentials={credentials}
+                    onAddCustomCredential={handleAddCustomCredential}
+                    onResetVault={handleReset}
+                  />
                 </div>
-              </section>
+              ) : (
+                /* ACTIVE PROCESSED STATE BENTO DESIGN GRID (For Dynamic Pathways/Feedback) */
+                <div className="grid grid-cols-12 auto-rows-auto gap-4">
+                  
+                  {/* Box 1 (col-span-12 md:col-span-3): Live Match Score percentage */}
+                  <section className="col-span-12 md:col-span-3 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <h2 className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono font-bold">Match Score</h2>
+                      <span className="text-[10px] text-emerald-500 bg-emerald-950/20 px-1.5 py-0.5 border border-emerald-900/30 rounded font-mono">
+                        +{Math.round((learningPath?.currentMatchScore || 0) - (learningPath?.baseMatchScore || 0))}% dynamic
+                      </span>
+                    </div>
+                    <div className="my-3">
+                      <div className="text-6xl font-light tracking-tighter text-white">
+                        {learningPath?.currentMatchScore || analysis.matchScore}<span className="text-2xl text-zinc-600">%</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed mt-2">
+                        Highly competitive alignment for <br/>
+                        <span className="text-white font-semibold font-sans">{analysis.roleTitle}</span>
+                      </p>
+                    </div>
+                    <div className="w-full h-1 bg-[#1f1f1f] rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-white opacity-80 transition-all duration-500"
+                        style={{ width: `${learningPath?.currentMatchScore || analysis.matchScore}%` }}
+                      ></div>
+                    </div>
+                  </section>
 
+                  {/* Box 2 (col-span-12 md:col-span-6): Live Monospace Logs of Resume Parser */}
+                  <section className="col-span-12 md:col-span-6 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
+                    <div className="flex justify-between items-center pb-2 border-b border-[#1f1f1f]/80">
+                      <h3 className="text-[10px] uppercase tracking-widest text-[#ededed]/60 font-mono font-bold">Resume Analysis logs</h3>
+                      <span className="text-[9.5px] text-zinc-500 font-mono">parser_engine_v3.ts</span>
+                    </div>
+                    
+                    <div className="flex-1 my-3 font-mono text-[11px] text-zinc-500 space-y-1.5 overflow-hidden">
+                      <div className="flex gap-2">
+                        <span className="text-zinc-700">01</span>
+                        <span>Parsed raw resume stream successfully - Confidence 100%</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-zinc-700">02</span>
+                        <span>Extracted skills: {analysis.skillsMatrix.slice(0, 3).map(s => s.skillName).join(", ")}, etc.</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-zinc-700">03</span>
+                        <span>Mapped against dynamic target role benchmarks.</span>
+                      </div>
+                      <div className="flex gap-2 text-zinc-400">
+                        <span className="text-zinc-700">04</span>
+                        <span>Critical skill gap highlights: {analysis.skillsMatrix.filter(s => s.targetLevel - s.resumeLevel >= 2).length} vectors found.</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-[#1f1f1f] flex flex-wrap gap-2 justify-between items-center mt-2">
+                      <span className="text-[10.5px] text-zinc-400 font-mono truncate max-w-[200px]">Candidate: {analysis.roleTitle}</span>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={handleExportSummary}
+                          className="text-[10px] px-3.5 py-1.5 border border-[#1f1f1f] hover:border-zinc-700 bg-transparent text-zinc-300 font-semibold uppercase tracking-tighter rounded transition duration-150 flex items-center gap-1.5 cursor-pointer"
+                          title="Export markdown report of current state"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Export Summary
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setAnalysis(null);
+                            setLearningPath(null);
+                            setActiveTab("onboarding");
+                          }}
+                          className="text-[10px] px-3.5 py-1.5 bg-white text-black font-semibold uppercase tracking-tighter rounded hover:bg-zinc-200 transition duration-150 cursor-pointer"
+                        >
+                          Ingest Another
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Box 3 (col-span-12 md:col-span-3): Dynamic Salary Trajectory projection widget */}
+                  <SalaryTrajectory 
+                    targetRole={analysis.roleTitle}
+                    matchScore={learningPath?.currentMatchScore || analysis.matchScore}
+                  />
+
+                  {/* Box 4 (col-span-12 md:col-span-4): Public Portfolio Configurator Node */}
+                  <section className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-[10px] uppercase tracking-widest text-[#ededed]/60 font-mono font-bold flex items-center gap-1.5 pb-2 border-b border-[#1f1f1f]/85">
+                        <Globe className="w-3.5 h-3.5 text-zinc-400" />
+                        PORTFOLIO PUBLICITY REGISTRY
+                      </h3>
+                      <p className="text-[11px] text-zinc-500 font-sans leading-relaxed mt-2.5">
+                        Publish your live verified competency matrix, scores, and upskilled certs to invite recruiters.
+                      </p>
+
+                      <div className="flex items-center gap-2 bg-[#050505] p-2.5 rounded border border-[#1f1f1f] my-3.5">
+                        <input 
+                          type="checkbox" 
+                          id="portfolio-public-switch"
+                          checked={isProfilePublic}
+                          disabled={isSavingPublicSettings}
+                          onChange={(e) => handleToggleProfilePublic(e.target.checked, customPublicUsername)}
+                          className="rounded bg-zinc-900 border-zinc-850 text-white focus:ring-0 focus:outline-none cursor-pointer"
+                        />
+                        <label htmlFor="portfolio-public-switch" className="text-[11px] font-mono text-zinc-400 select-none cursor-pointer">
+                          Enable Public Portfolio
+                        </label>
+                      </div>
+
+                      {isProfilePublic && (
+                        <div className="space-y-3.5 animate-fadeIn">
+                          <div className="flex gap-1.5">
+                            <input 
+                              type="text"
+                              value={customPublicUsername}
+                              disabled={isSavingPublicSettings}
+                              onChange={(e) => setCustomPublicUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                              className="bg-[#050505] border border-zinc-900 focus:border-zinc-700 focus:outline-none rounded px-2 py-1 text-xs text-white font-mono flex-1"
+                              placeholder="unique-slug"
+                            />
+                            <button
+                              onClick={() => handleToggleProfilePublic(isProfilePublic, customPublicUsername)}
+                              disabled={isSavingPublicSettings}
+                              className="bg-white hover:bg-zinc-200 text-black px-3 py-1.5 text-[9.5px] font-mono rounded font-bold uppercase transition-all cursor-pointer"
+                            >
+                              Sync Slug
+                            </button>
+                          </div>
+
+                          <div className="p-2 bg-zinc-950 border border-zinc-900 rounded text-[10.5px] font-mono text-zinc-400 flex justify-between items-center select-all gap-1.5">
+                            <span className="truncate text-zinc-500">/p/{customPublicUsername}</span>
+                            <div className="flex gap-2 shrink-0">
+                              <button
+                                onClick={() => {
+                                  const shareUrl = `${window.location.origin}/p/${customPublicUsername}`;
+                                  navigator.clipboard.writeText(shareUrl);
+                                  setCopiedLink(true);
+                                  setTimeout(() => setCopiedLink(false), 2000);
+                                }}
+                                className="p-1 text-zinc-500 hover:text-white rounded transition-colors"
+                                title="Copy full URL"
+                              >
+                                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                              <a 
+                                href={`/p/${customPublicUsername}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 text-zinc-500 hover:text-white rounded transition-colors"
+                                title="View portfolio live"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Box 5 (col-span-12 md:col-span-8): Mapped Skills Gaps list (Radar chart replacement/wrapper) */}
+                  <section className="col-span-12 md:col-span-8 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col justify-between">
+                    <RadarChart 
+                      skillsMatrix={analysis.skillsMatrix}
+                      targetRole={analysis.roleTitle}
+                    />
+                  </section>
+
+                  {/* Box 6 (col-span-12): Custom Learning Curriculum steps timeline */}
+                  <section className="col-span-12 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-5 flex flex-col">
+                    {learningPath && (
+                      <TimelinePath
+                        learningPath={learningPath}
+                        onToggleStep={handleToggleStep}
+                        onVerifyStep={handleVerifyStep}
+                        verifiedStepIds={verifiedStepIds}
+                      />
+                    )}
+                  </section>
+
+                  {/* Box 7 (col-span-12): High Contrast Vercel/Stripe Quick Action Card */}
+                  <section 
+                    onClick={() => {
+                      const firstIncomplete = learningPath?.steps.find(s => !s.completed);
+                      if (firstIncomplete) {
+                        handleToggleStep(firstIncomplete.id);
+                      } else {
+                        alert("Complete! All custom curriculum items verified in PostgreSQL vault.");
+                      }
+                    }}
+                    className="col-span-12 bg-white rounded-lg p-5 flex items-center justify-between cursor-pointer group hover:bg-zinc-200 transition-all duration-150 relative overflow-hidden"
+                  >
+                    <div className="flex flex-col select-none">
+                      <h3 className="text-[10px] uppercase tracking-widest text-black/50 font-bold font-mono">
+                        Quick Action
+                      </h3>
+                      <span className="text-sm font-bold text-black mt-1 font-sans">
+                        {learningPath?.steps.some(s => !s.completed) ? "Start Next Module" : "Retake Curriculum Pathways"}
+                      </span>
+                    </div>
+                    <div className="w-10 h-10 rounded-full border border-black/20 flex items-center justify-center group-hover:border-black/55 transition-colors shrink-0">
+                      <ChevronRight className="w-5 h-5 text-black stroke-[2.5]" />
+                    </div>
+                  </section>
+
+                </div>
+              )}
             </div>
           )}
 
